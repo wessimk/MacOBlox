@@ -63,3 +63,22 @@ make Roblox exit with `Failed to initialize crash reporter`. The experimental
 branch now keeps the handler alive while Roblox runs and retains scoped
 cleanup at session teardown. The failure was reproduced with normal launcher
 polling; after the fix, the same startup check remained alive for 45 seconds.
+
+### Main player window remains grey
+
+The real client is not yet a working UI prototype. In the tested WSL session,
+Roblox presents one solid grey frame (sampled RGBA `135,135,135,255`) and then
+submits no further draws or buffer swaps. The native GL window's
+`CGLFlushDrawable` returns success and its Wayland buffer is attached and
+committed. The main AppKit event loop remains active. An earlier null drawable
+belongs to the layer context; it is distinct from the successfully presented
+player context.
+
+A fresh Darling prefix reproduced the same result over 90 seconds. An X11
+control also stalled during client startup, so the evidence does not establish
+a Wayland-specific cause. Event-loop wakeup, HID registration and alternate
+lock experiments did not restore rendering and were removed. The client logs
+shader parser and missing-variant errors; their role in the stall is unproven.
+The remaining failure is unresolved. Passive CGL tracing now records the first
+five flush return codes when `MACOBLOX_TRACE_CGL=1` is enabled. Local evidence
+includes `logs/launch-20261008-214014.log` and `logs/wsl-grey-fresh.log`.

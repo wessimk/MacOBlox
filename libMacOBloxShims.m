@@ -465,7 +465,13 @@ static int macoblox_CGLFlushDrawable(void* context) {
     }
     macoblox_frame_presenting(context);
     unsigned long serial = macoblox_egl_swap_serial();
-    return macoblox_finish_cgl_swap(serial, CGLFlushDrawable(context));
+    int result = macoblox_finish_cgl_swap(serial, CGLFlushDrawable(context));
+    if (macoblox_trace_cgl_enabled() && macoblox_cgl_flush_drawable_count <= 5) {
+        write_str("[MacOBlox CGL] CGLFlushDrawable returned ");
+        print_num(result);
+        write_str("\n");
+    }
+    return result;
 }
 DYLD_INTERPOSE(macoblox_CGLFlushDrawable, CGLFlushDrawable);
 

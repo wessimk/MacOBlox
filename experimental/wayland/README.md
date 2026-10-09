@@ -54,3 +54,12 @@ shader compatibility errors; fixture success does not establish complete
 Roblox presentation. Local evidence is in `logs/wsl-wayland-opengl/`,
 `logs/wsl-build.log`, and the `logs/launch-*.log` client logs. These generated
 files and the downloaded client are excluded from Git.
+
+### Crash reporter startup fix
+
+The launcher previously killed `RobloxCrashHandler` after a fixed three-second
+delay. Under WSL this could interrupt Crashpad's initial pipe handshake and
+make Roblox exit with `Failed to initialize crash reporter`. The experimental
+branch now keeps the handler alive while Roblox runs and retains scoped
+cleanup at session teardown. The failure was reproduced with normal launcher
+polling; after the fix, the same startup check remained alive for 45 seconds.

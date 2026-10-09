@@ -112,9 +112,19 @@ class ProcessScopeTests(unittest.TestCase):
 
     def test_startup_orphan_cleanup_rechecks_scope(self):
         with patch.object(core,"_orphaned_darling_processes",return_value=[13]), \
+                patch.object(core,"NOROOT_LIB","/fixture/noroot.so"), \
+                patch.object(core,"rootless_process_in_prefix",return_value=True) as in_prefix, \
+                patch.object(core,"darlingserver_running",return_value=False) as running, \
                 patch.object(core,"_terminate") as terminate:
             self.assertEqual(core.clear_orphaned_darling(),1)
-        terminate.assert_called_once_with([13],scope=core._process_in_prefix)
+            terminate.assert_called_once()
+            self.assertEqual(terminate.call_args.args,([13],))
+            guard=terminate.call_args.kwargs["scope"]
+            self.assertTrue(guard(13))
+            running.return_value=True
+            self.assertFalse(guard(13))
+            running.return_value=False;in_prefix.return_value=False
+            self.assertFalse(guard(13))
 
     def test_live_namespaces_require_selected_server_and_exclude_host_namespace(self):
         namespaces={core.os.getpid():"host",10:"selected",11:"host",12:None,13:"other"}
@@ -211,6 +221,7 @@ class ProcessScopeTests(unittest.TestCase):
         session=object.__new__(core.RobloxSession)
         session.process=Mock();session.process.poll.return_value=None
         session.dns=None;session.audio=None
+        session._record_lifecycle=Mock()
         with patch.object(core,"roblox_pids",return_value=[1]), \
                 patch.object(core,"_terminate_roblox") as terminate, \
                 patch.object(core,"_terminate_frontend") as frontend:
@@ -230,6 +241,20 @@ class ProcessScopeTests(unittest.TestCase):
                 patch.object(core,"roblox_pids") as scan:
             self.assertIsNone(session.poll())
         self.assertEqual(session.game_pids,[11]);scan.assert_not_called()
+
+    def test_session_poll_preserves_crash_handler_during_slow_startup(self):
+        session=object.__new__(core.RobloxSession)
+        session.process=Mock();session.process.poll.return_value=None
+        session.audio=None;session.seen_roblox=True
+        session.started_at=time.monotonic()-60
+        session.game_pids=[11];session.scanned_at=time.monotonic();session.gone_since=None
+        with patch.object(core.QUIT_SENTINEL.__class__,"exists",return_value=False), \
+                patch.object(core,"_prefix_namespaces",return_value={"selected"}), \
+                patch.object(core,"_process_state",return_value="R"), \
+                patch.object(core,"_roblox_process_in_prefix",return_value=True), \
+                patch.object(core,"_kill_crash_handlers") as kill_handler:
+            self.assertIsNone(session.poll())
+        kill_handler.assert_not_called()
 
 
 if __name__ == "__main__": unittest.main()

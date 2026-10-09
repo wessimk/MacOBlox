@@ -2105,19 +2105,9 @@ class RobloxSession:
                                             stdout=log, stderr=subprocess.STDOUT,
                                             start_new_session=True)
         self.started_at = time.monotonic()
-        threading.Thread(target=self._suppress_crash_handler, daemon=True).start()
-
-    def _suppress_crash_handler(self):
-        """Terminate RobloxCrashHandler after initial handshake to prevent exit hangs and slow crash logs."""
-        for _ in range(20):
-            time.sleep(1)
-            if not self.process or self.process.poll() is not None:
-                return
-            crash_pids = roblox_pids(("RobloxCrashHandler",))
-            if crash_pids:
-                time.sleep(2)
-                _kill_crash_handlers()
-                break
+        # Crashpad must finish its handshake before Roblox can initialize.
+        # A fixed delay cannot establish readiness, especially under WSL.
+        # Leave the handler alive and clean it up with the selected session.
 
     def poll(self):
         """None while running, otherwise the exit status (or -1 if unknown)."""
@@ -2134,10 +2124,6 @@ class RobloxSession:
         if self.seen_roblox and QUIT_SENTINEL.exists():
             self.finish("quit_sentinel")
             return -1
-        # Suppress any crash handler to prevent slow dumps and exit blockage
-        if self.seen_roblox and time.monotonic() - self.started_at > 3:
-            _kill_crash_handlers()
-
         # darling shell can outlive a Roblox that was killed; watch the game
         # processes themselves as well. Known ones are checked each second,
         # the whole of /proc only when they are gone or every few seconds.

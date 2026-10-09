@@ -35,6 +35,7 @@ class DisplayTests(unittest.TestCase):
 
     def test_dpi_scale_reaches_guest_on_both_backends(self):
         session = object.__new__(core.RobloxSession)
+        session._gpu_environment, session.gpu_adapter = {}, None
         session.web_socket = session.dns = session.audio = None
         for backend in ("x11", "wayland"):
             with self.subTest(backend=backend):
@@ -51,6 +52,7 @@ class DisplayTests(unittest.TestCase):
 
     def test_direct_invalid_dpi_is_sanitized_before_guest_export(self):
         session = object.__new__(core.RobloxSession)
+        session._gpu_environment, session.gpu_adapter = {}, None
         session.web_socket = session.dns = session.audio = None
         session.settings = dict(core.DEFAULT_SETTINGS, dpi_scale=float("nan"))
         with patch.dict(os.environ, {}, clear=True), \
@@ -119,6 +121,7 @@ class DisplayTests(unittest.TestCase):
 
     def test_native_wayland_driver_configuration_reaches_host_and_guest(self):
         session = object.__new__(core.RobloxSession)
+        session._gpu_environment, session.gpu_adapter = {}, None
         session.settings = dict(core.DEFAULT_SETTINGS, display_backend="wayland", renderer="vulkan")
         session.web_socket = session.dns = session.audio = None
         with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}, clear=True), \

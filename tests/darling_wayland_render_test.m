@@ -68,14 +68,17 @@ extern void glClearColor(float, float, float, float), glClear(unsigned int);
 extern void glReadPixels(int, int, int, int, unsigned int, unsigned int, void *);
 extern unsigned int glGetError(void);
 
+static int require_zink = 1, allow_software = 0;
+
 static int render(NSOpenGLContext *context, const char *label) {
     [context makeCurrentContext];
     const char *renderer = (const char *)glGetString(0x1F01);
     const char *version = (const char *)glGetString(0x1F02);
     printf("%s_RENDERER %s; GL %s\n", label, renderer ? renderer : "none", version ? version : "none");
     fflush(0);
-    if (!renderer || !strstr(renderer, "zink") || strstr(renderer, "llvmpipe") ||
-        strstr(renderer, "lavapipe") || strstr(renderer, "softpipe")) return 0;
+    if (!renderer || (require_zink && !strstr(renderer, "zink"))) return 0;
+    if (!allow_software && (strstr(renderer, "llvmpipe") ||
+        strstr(renderer, "lavapipe") || strstr(renderer, "softpipe"))) return 0;
     glClearColor(.25f, .5f, .75f, 1);
     glClear(0x4000);
     unsigned char pixel[4] = {0};
@@ -91,6 +94,10 @@ int main(int argc, char **argv) {
     alarm(10);
     [[NSAutoreleasePool alloc] init];
     int expect_failure = argc == 2 && !strcmp(argv[1], "--expect-init-failure");
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--opengl")) require_zink = 0;
+        if (!strcmp(argv[i], "--allow-software")) allow_software = 1;
+    }
     int failures = 0;
     for (int attempt = 0; attempt < 2; attempt++) {
         @try { [NSDisplay currentDisplay]; }

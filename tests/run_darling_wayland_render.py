@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "launcher"))
 from macoblox import display, graphics
 
 
-def run_case(binary, build, output, negative):
+def run_case(binary, build, output, negative, renderer="vulkan", allow_software=False):
     name = "failed-init-retry" if negative else "render"
     prefix = Path(tempfile.mkdtemp(prefix="macoblox-wayland-fixture-")) / "prefix"
     for relative in ("var/run", "var/db", "var/log", "var/tmp/launchd", "private/var/run",
@@ -35,8 +35,9 @@ def run_case(binary, build, output, negative):
             "library_path": str(prefix.parent / "missing-driver.so"), "api_version": "1.3.0"}}))
         overrides["VK_DRIVER_FILES"] = str(invalid)
     with patch.dict(os.environ, overrides):
-        values = graphics.renderer_environment("vulkan")
-        values.update(display.window_environment({"renderer": "vulkan", "display_backend": "wayland"},
+        selected_renderer = "vulkan" if negative else renderer
+        values = graphics.renderer_environment(selected_renderer)
+        values.update(display.window_environment({"renderer": selected_renderer, "display_backend": "wayland"},
                                                  build / "libmacoblox-wayland.so"))
     values.update({"MACOBLOX_TRACE_WAYLAND": "1", "DYLD_FORCE_FLAT_NAMESPACE": "1",
                    "DYLD_INSERT_LIBRARIES": "/Volumes/SystemRoot" + str(build / "libMacOBloxShims.dylib"),
@@ -48,12 +49,19 @@ def run_case(binary, build, output, negative):
     arguments = ["/Volumes/SystemRoot" + str(binary)]
     if negative:
         arguments.append("--expect-init-failure")
+    else:
+        if renderer == "opengl":
+            arguments.append("--opengl")
+        if allow_software:
+            arguments.append("--allow-software")
     command = ["darling", "shell", "/bin/bash", "-c",
                'unset DISPLAY MACOBLOX_WEB_SOCKET LD_PRELOAD; exec /usr/bin/env "$@"',
                "wayland-fixture", *[f"{key}={value}" for key, value in values.items()], *arguments]
     log_path = output / f"{name}.log"
     evidence = {"prefix": str(prefix), "no_auth": True, "display_unset": True,
-                "negative_control": negative, "generated_icd": values.get("VK_ADD_DRIVER_FILES")}
+                "negative_control": negative, "renderer": selected_renderer,
+                "allow_software": allow_software and not negative,
+                "generated_icd": values.get("VK_ADD_DRIVER_FILES")}
     try:
         with log_path.open("w") as log:
             result = subprocess.run(command, env=environment, stdout=log, stderr=subprocess.STDOUT, timeout=45)
@@ -85,6 +93,9 @@ def main():
     parser.add_argument("--sysroot", type=Path, default=Path(os.environ.get("DARLING_SYSROOT", "/usr/libexec/darling")))
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--compile-only", action="store_true")
+    parser.add_argument("--renderer", choices=("vulkan", "opengl"), default="vulkan")
+    parser.add_argument("--allow-software", action="store_true",
+                        help="Allow software rendering for WSLg windowing experiments")
     args = parser.parse_args()
     build = args.build_dir.resolve()
     for name in ("libMacOBloxShims.dylib", "libmacoblox-wayland.so"):
@@ -106,7 +117,7 @@ def main():
     if not os.environ.get("WAYLAND_DISPLAY"):
         parser.error("This fixture requires a running native Wayland desktop session")
     os.environ["XDG_CACHE_HOME"] = str(output / "driver-cache")
-    positive = run_case(binary, build, output, False)
+    positive = run_case(binary, build, output, False, args.renderer, args.allow_software)
     negative = run_case(binary, build, output, True)
     return 0 if positive and negative else 1
 

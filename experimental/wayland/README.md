@@ -48,8 +48,8 @@ requires hardware Zink rendering.
   fixtures that bypassed the session constructor without initializing its
   cached GPU state.
 
-This setup has not verified GPU acceleration, sign-in, or gameplay. Hardware
-Vulkan/Zink initialization failed in this WSL session. The client also logged
+The initial October 8 checks did not verify GPU acceleration, sign-in, or gameplay.
+Hardware Vulkan/Zink initialization failed in this WSL session. The client also logged
 shader compatibility errors; fixture success does not establish complete
 Roblox presentation. Local evidence is in `logs/wsl-wayland-opengl/`,
 `logs/wsl-build.log`, and the `logs/launch-*.log` client logs. These generated
@@ -119,3 +119,38 @@ Evidence includes `logs/wsl-final-frame-loop-reviewed/`,
 `logs/wsl-ulock-wake-control.log`, and the October 12 client logs. The remaining
 UI startup/render-job stall is unresolved; fixture success is not a claim that
 the real Roblox UI or gameplay works.
+
+### WSL hardware OpenGL and input, October 12, 2026
+
+WSLg on this installation chose llvmpipe unless `GALLIUM_DRIVER=d3d12` was
+explicitly selected. With `/usr/lib/wsl/lib` in `LD_LIBRARY_PATH`, the native
+Darling fixture rendered all eight queued frames on `D3D12 (NVIDIA GeForce
+RTX 3060)`, without the software-rendering allowance. Maximum queue delay was
+1.04 ms. This uses Mesa's OpenGL driver over Direct3D 12; it does not require
+Roblox's Metal renderer or Zink.
+
+The launcher now selects this path for OpenGL when `/dev/dxg`, `libd3d12.so`
+and `libdxcore.so` are present. Explicit Mesa driver selectors are respected,
+existing library search paths are preserved, and both host commands and
+already-running Darling guests receive the settings. Bare-metal OpenGL and
+the Vulkan selection retain their existing behavior.
+
+Repeated client launches now draw the Create Account / Sign In controls,
+but this is still a single-frame, unresponsive UI. Mouse and keyboard traces
+show delivery through SDL, the Wayland bridge and AppKit: button events reach
+`RBXWindow` and hit-test to `RobloxOgreView`; Tab reaches application event
+dispatch. The client produces no second GL frame after those events. The
+visible UI occupies approximately 800 by 552 pixels within a larger drawable,
+leaving grey margins. Input delivery is verified; interactive UI and correct
+layout are unresolved. The window uses the player's OpenGL UI; the web
+bridge has only received an attach request.
+
+The WSL prefix contains both audited Darling kqueue repairs and all required
+replacement frameworks. CPU-affinity and initial-size-notification controls
+did not restore recurring rendering; neither workaround is shipped. Input
+tracing is limited to the first 24 button/key transitions and requires
+`MACOBLOX_TRACE_WAYLAND`; it does not log typed text or key codes.
+
+Local evidence: `logs/wsl-d3d12-fixture/`, `logs/wsl-runtime-audit.log`,
+`logs/launch-20261012-162444.log`, and `logs/launch-20261012-162603.log`.
+Every player test was stopped after screenshot analysis.

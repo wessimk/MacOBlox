@@ -276,6 +276,12 @@ void translate(const SDL_Event &input) {
         break;
     default:return;
     }
+    static unsigned input_traces=0;
+    if(getenv("MACOBLOX_TRACE_WAYLAND") && input_traces<24 &&
+       (event.type==MW_DOWN || event.type==MW_UP || event.type==MW_KEY_DOWN || event.type==MW_KEY_UP)) {
+        ++input_traces;
+        std::fprintf(stderr,"[MacOBlox Wayland] Host input type=%u window=%u x=%.0f y=%.0f\n",event.type,event.window,event.x,event.y);
+    }
     push(event);
 }
 unsigned create_window(int width,int height,bool bootstrap=false) {

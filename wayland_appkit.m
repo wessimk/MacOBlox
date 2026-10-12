@@ -446,6 +446,14 @@ static BOOL subwindow_frame(MacOBloxWaylandWindow *parent,NSRect value,int *x,in
             for(NSUInteger j=0;j<[windows count];j++){MacOBloxWaylandWindow *candidate=(void *)[(NSNumber *)[windows objectAtIndex:j] longValue];if(candidate->handle==input.window){window=candidate;break;}}
             if(!window || !window->owner)continue;
             NSWindow *owner=window->owner;modifiers=input.modifiers;
+            static unsigned input_traces;
+            if(getenv("MACOBLOX_TRACE_WAYLAND") && input_traces<24 &&
+               (input.type==MW_DOWN || input.type==MW_UP || input.type==MW_KEY_DOWN || input.type==MW_KEY_UP)) {
+                ++input_traces;
+                char message[160];
+                int length=snprintf(message,sizeof message,"[MacOBlox Wayland] AppKit input type=%u window=%u x=%.0f y=%.0f\n",input.type,input.window,input.x,input.y);
+                if(length>0 && length<sizeof message)write(2,message,length);
+            }
             if(input.type==MW_CAPTURE){__atomic_store_n(&captured,input.button?input.window:0,__ATOMIC_RELEASE);continue;}
             if(input.type==MW_RESIZE){window->frame.size=(NSSize){input.x,input.y};if(window->bitmap)CGContextRelease(window->bitmap);window->bitmap=0;[owner platformWindow:window frameChanged:window->frame didSize:YES];continue;}
             if(input.type==MW_CLOSE){[owner performClose:nil];continue;}

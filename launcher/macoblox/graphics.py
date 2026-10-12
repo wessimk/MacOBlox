@@ -159,7 +159,7 @@ def mangohud_environment(renderer, enabled=False):
 
 def renderer_environment(renderer):
     if renderer == "opengl":
-        return {}
+        return wsl_opengl_environment()
     if renderer != "vulkan":
         raise ValueError(f"Unknown renderer: {renderer}")
     # GLVND would otherwise choose NVIDIA's EGL implementation, ignoring
@@ -174,6 +174,24 @@ def renderer_environment(renderer):
         "EGL_PLATFORM": "x11",
         "MACOBLOX_METAL": "0",
     }
+
+
+def wsl_opengl_environment():
+    """Select WSL's accelerated Mesa driver in both host and warm guests."""
+    root = Path("/usr/lib/wsl/lib")
+    if not Path("/dev/dxg").exists() or not all(
+            (root / name).is_file() for name in ("libd3d12.so", "libdxcore.so")):
+        return {}
+    variables = {name: os.environ[name] for name in
+                 ("GALLIUM_DRIVER", "MESA_LOADER_DRIVER_OVERRIDE", "LD_LIBRARY_PATH")
+                 if name in os.environ}
+    if not any(name in variables for name in ("GALLIUM_DRIVER", "MESA_LOADER_DRIVER_OVERRIDE")):
+        variables["GALLIUM_DRIVER"] = "d3d12"
+    if variables.get("GALLIUM_DRIVER") == "d3d12":
+        paths = variables.get("LD_LIBRARY_PATH", "").split(":")
+        if str(root) not in paths:
+            variables["LD_LIBRARY_PATH"] = ":".join([str(root), *filter(None, paths)])
+    return variables
 
 
 def wayland_vulkan_environment():

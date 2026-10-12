@@ -11,6 +11,42 @@ from macoblox import core, graphics
 
 
 class GraphicsTests(unittest.TestCase):
+    def test_wsl_opengl_selects_hardware_and_preserves_library_search(self):
+        with patch.object(graphics.Path, "exists", return_value=True), \
+                patch.object(graphics.Path, "is_file", return_value=True), \
+                patch.dict(os.environ, {"LD_LIBRARY_PATH": "/custom/lib"}, clear=True):
+            self.assertEqual(graphics.renderer_environment("opengl"), {
+                "GALLIUM_DRIVER": "d3d12",
+                "LD_LIBRARY_PATH": "/usr/lib/wsl/lib:/custom/lib"})
+
+    def test_wsl_opengl_respects_explicit_driver_and_missing_hardware(self):
+        with patch.object(graphics.Path, "exists", return_value=True), \
+                patch.object(graphics.Path, "is_file", return_value=True):
+            for selector in ("GALLIUM_DRIVER", "MESA_LOADER_DRIVER_OVERRIDE"):
+                with self.subTest(selector=selector), \
+                        patch.dict(os.environ, {selector: "llvmpipe"}, clear=True):
+                    self.assertEqual(graphics.renderer_environment("opengl"), {selector: "llvmpipe"})
+        for device, libraries in ((False, True), (True, False)):
+            with self.subTest(device=device, libraries=libraries), \
+                    patch.object(graphics.Path, "exists", return_value=device), \
+                    patch.object(graphics.Path, "is_file", return_value=libraries):
+                self.assertEqual(graphics.renderer_environment("opengl"), {})
+
+    def test_wsl_driver_reaches_existing_darling_guests(self):
+        session = object.__new__(core.RobloxSession)
+        session.settings = dict(core.DEFAULT_SETTINGS)
+        session._gpu_environment, session.gpu_adapter = {}, None
+        session.web_socket = session.dns = session.audio = None
+        with patch.dict(os.environ, {}, clear=True), \
+                patch.object(graphics, "wsl_opengl_environment", return_value={
+                    "GALLIUM_DRIVER": "d3d12", "LD_LIBRARY_PATH": "/usr/lib/wsl/lib"}), \
+                patch.object(core, "host_vram_bytes", return_value=0), \
+                patch.object(core, "icon_argb_file", side_effect=OSError):
+            host = session.environment()
+            guest = dict(item.split("=", 1) for item in session.shim_variables())
+        for name in ("GALLIUM_DRIVER", "LD_LIBRARY_PATH"):
+            self.assertEqual(host[name], guest[name])
+
     def test_gpu_budget_uses_selected_adapter_and_current_free_memory(self):
         output = "NVIDIA GeForce RTX 3060 Ti, 8192, 4096\nNVIDIA Other, 24576, 20000\n"
         with patch.object(core.Path, "glob", return_value=[]), \
@@ -150,7 +186,8 @@ class GraphicsTests(unittest.TestCase):
             self.assertEqual(graphics._askpass_program(), "/usr/lib/gcr4-ssh-askpass")
 
     def test_default_preserves_host_driver_selection(self):
-        self.assertEqual(graphics.renderer_environment("opengl"), {})
+        with patch.object(graphics.Path, "exists", return_value=False):
+            self.assertEqual(graphics.renderer_environment("opengl"), {})
         self.assertEqual(core.DEFAULT_SETTINGS["renderer"], "opengl")
 
     def test_wayland_nvidia_adds_egl_icd_and_reuses_atomic_cache(self):

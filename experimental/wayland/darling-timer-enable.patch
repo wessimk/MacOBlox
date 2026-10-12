@@ -1,0 +1,17 @@
+--- a/src/common/kevent.c
++++ b/src/common/kevent.c
+@@ -179,7 +179,13 @@
+         dbg_printf("kn_disable returned %d", rv);
+     } else if (src->flags & EV_ENABLE) {
+         kn->kev.flags &= ~EV_DISABLE;
+-        rv = filt->kn_enable(filt, kn);
++        if (src->filter == EVFILT_TIMER && (src->flags & EV_ADD)) {
++            /* Apply the new deadline before enabling an existing timer. */
++            kn->kev.udata = src->udata;
++            rv = filt->kn_modify(filt, kn, src);
++        } else {
++            rv = filt->kn_enable(filt, kn);
++        }
+         dbg_printf("kn_enable returned %d", rv);
+     } else if (src->flags & EV_ADD || src->flags == 0 || src->flags & EV_RECEIPT) {
+         kn->kev.udata = src->udata;

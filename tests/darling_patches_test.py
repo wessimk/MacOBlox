@@ -201,5 +201,43 @@ class DarlingPatchTests(unittest.TestCase):
         self.assertEqual(darling.INSERT_CODE[:8], bytes.fromhex("554889e54883ec40"))
         self.assertEqual(darling.FOREACH_CODE[:8], bytes.fromhex("554889e54883ec20"))
 
+    def test_timer_assembler_matches_manifest_without_relocations(self):
+        clang = shutil.which("clang")
+        if not clang: self.skipTest("clang unavailable")
+        root = Path(__file__).resolve().parent.parent
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)/"timer.o"
+            subprocess.run([clang, "-target", "x86_64-apple-darwin", "-c",
+                            str(root/"darling_timer_enable.S"), "-o", str(output)], check=True)
+            data = output.read_bytes()
+        position = 32
+        text = None
+        for _ in range(struct.unpack_from("<I", data, 16)[0]):
+            command, size = struct.unpack_from("<II", data, position)
+            if command == 0x19:
+                for index in range(struct.unpack_from("<I", data, position+64)[0]):
+                    start = position+72+80*index
+                    if data[start:start+16].split(b"\0")[0] == b"__text":
+                        length, offset, _, _, relocations = struct.unpack_from("<Q4I", data, start+40)
+                        self.assertEqual(relocations, 0)
+                        text = data[offset:offset+length]
+            position += size
+        self.assertEqual(text, darling.TIMER_ENABLE_CODE)
+
+    def test_known_stock_and_map_only_copies_converge(self):
+        root = Path("/usr/libexec/darling")
+        if not root.exists(): self.skipTest("Darling runtime unavailable")
+        for old, new in ((darling.SPARSE_SYSTEM_RELEASE, darling.SYSTEM_RELEASE),
+                         (darling.SPARSE_LIBC_RELEASE, darling.LIBC_RELEASE)):
+            with self.subTest(library=new.library):
+                data = (root/new.library).read_bytes()
+                if digest(data) != new.sha256: self.skipTest("Different Darling build")
+                sparse = darling.plan_sparse_map_patch(data, (old,), library=new.library)[1]
+                status, combined = darling.plan_sparse_map_patch(data, library=new.library)
+                self.assertEqual(status, "patched")
+                self.assertEqual(digest(combined), new.patched_sha256)
+                self.assertEqual(darling.plan_sparse_map_patch(sparse, library=new.library), ("patched", combined))
+                self.assertEqual(darling.plan_sparse_map_patch(combined, library=new.library), ("already patched", None))
+
 
 if __name__ == "__main__": unittest.main()

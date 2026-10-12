@@ -1324,7 +1324,7 @@ def prepare_prefix(env):
     for relative, path in kqueue_libraries:
         status = darling_patches.install_sparse_map_copy(path, DARLING_PREFIX / relative,
                                                        library=relative.as_posix())
-        logging.getLogger("macoblox").info("Darling kqueue map: %s", status)
+        logging.getLogger("macoblox").info("Darling kqueue runtime: %s", status)
 
 
 def _patched_kqueue_runtime():

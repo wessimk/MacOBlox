@@ -1,11 +1,11 @@
-"""Pinned, app-prefix-only repair for Darling's sparse kqueue map walk.
+"""Pinned, app-prefix-only repairs for Darling's kqueue runtime.
 
 The original close path scans every possible descriptor. These replacements
 preserve its callbacks, reference counts and locks, and bound iteration by
 the greatest successfully inserted descriptor. See darling_sparse_map.c for
 the audited replacement source and its libkqueue license.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import os
 from pathlib import Path
@@ -72,7 +72,32 @@ SYSTEM_RELEASE = Release(
                site.replacement) for site in LIBC_RELEASE.sites),
     "usr/lib/libSystem.B.dylib",
 )
-RELEASES = (SYSTEM_RELEASE, LIBC_RELEASE)
+# EV_ADD | EV_ENABLE must apply a timer's new deadline. Darling's generic
+# enable branch otherwise skips kn_modify and rearms the old deadline.
+# This replaces only that branch in the audited _kevent_copyin_one frames.
+# Timer ADD+ENABLE calls kn_modify; enable-only and other filters retain
+# kn_enable. See darling_timer_enable.S and the source patch in the experiment.
+TIMER_ENABLE_CODE = bytes.fromhex(
+    "488b55e866f7420a0100741c66837a08f97515488b75e0488b421848894620"
+    "488b7dd8ff5728eb10488b75e06683660af7488b7dd8ff57388945d4"
+).ljust(0x6D, b"\x90") + bytes.fromhex("e9b5000000")
+SPARSE_SYSTEM_RELEASE, SPARSE_LIBC_RELEASE = SYSTEM_RELEASE, LIBC_RELEASE
+TIMER_SYSTEM_SITE = Site("_kevent_copyin_one", 0x466, 0x72,
+    "c61e89aab613dc9af4934a2f8586f258fd86d484728297eaf03960542fce7ae1", TIMER_ENABLE_CODE)
+TIMER_LIBC_SITE = replace(TIMER_SYSTEM_SITE,
+    sha256="573d281cb9675e968a5212275e49c314bf52aafd7e5b35f09e319aaffaadac6c")
+SYSTEM_RELEASE = replace(SYSTEM_RELEASE,
+    patched_sha256="011f4e30e782df4bde70972da321fa1aa2be07c90b8e5e2b7df6ebe4819555ed",
+    sites=SYSTEM_RELEASE.sites + (TIMER_SYSTEM_SITE,))
+LIBC_RELEASE = replace(LIBC_RELEASE,
+    patched_sha256="c735e62d506d80d2b59db74cad3fb815f8122f12724e132a2cd177486471350d",
+    sites=LIBC_RELEASE.sites + (TIMER_LIBC_SITE,))
+# Upgrade the exact earlier map-only copies already installed in app prefixes.
+SYSTEM_TIMER_UPGRADE = replace(SYSTEM_RELEASE,
+    sha256=SPARSE_SYSTEM_RELEASE.patched_sha256, sites=(TIMER_SYSTEM_SITE,))
+LIBC_TIMER_UPGRADE = replace(LIBC_RELEASE,
+    sha256=SPARSE_LIBC_RELEASE.patched_sha256, sites=(TIMER_LIBC_SITE,))
+RELEASES = (SYSTEM_RELEASE, LIBC_RELEASE, SYSTEM_TIMER_UPGRADE, LIBC_TIMER_UPGRADE)
 
 
 def _x86_slice(data):

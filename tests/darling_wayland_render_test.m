@@ -38,6 +38,7 @@ typedef struct { Point origin; Size size; } Rect;
 @interface NSDate : NSObject
 + (id)date;
 + (id)dateWithTimeIntervalSinceNow:(double)seconds;
++ (double)timeIntervalSinceReferenceDate;
 @end
 @interface NSEvent : NSObject
 + (id)keyEventWithType:(unsigned long)type location:(Point)point modifierFlags:(unsigned long)flags timestamp:(double)timestamp windowNumber:(long)number context:(id)context characters:(id)text charactersIgnoringModifiers:(id)plain isARepeat:(unsigned char)repeat keyCode:(unsigned short)key;
@@ -67,8 +68,14 @@ extern const unsigned char *glGetString(unsigned int);
 extern void glClearColor(float, float, float, float), glClear(unsigned int);
 extern void glReadPixels(int, int, int, int, unsigned int, unsigned int, void *);
 extern unsigned int glGetError(void);
+extern int pthread_create(void **, const void *, void *(*)(void *), void *);
+extern int pthread_join(void *, void **), pthread_main_np(void), usleep(unsigned int);
+extern void dispatch_async_f(void *, void *, void (*)(void *));
+extern struct dispatch_queue_s _dispatch_main_q;
 
 static int require_zink = 1, allow_software = 0;
+static int queued_frames, queued_render_failed;
+static double submitted_at[8], maximum_queue_delay;
 
 static int render(NSOpenGLContext *context, const char *label) {
     [context makeCurrentContext];
@@ -90,8 +97,26 @@ static int render(NSOpenGLContext *context, const char *label) {
     return glGetError() == 0;
 }
 
+static void render_queued_frame(void *context) {
+    if (queued_frames >= 8) { queued_render_failed=1; return; }
+    double delay=[NSDate timeIntervalSinceReferenceDate]-submitted_at[queued_frames];
+    if(delay>maximum_queue_delay)maximum_queue_delay=delay;
+    if (!pthread_main_np() || !render((NSOpenGLContext *)context, "QUEUED"))
+        queued_render_failed = 1;
+    queued_frames++;
+}
+
+static void *queue_frames(void *context) {
+    for (int index = 0; index < 8; index++) {
+        usleep(25000);
+        submitted_at[index]=[NSDate timeIntervalSinceReferenceDate];
+        dispatch_async_f(&_dispatch_main_q, context, render_queued_frame);
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
-    alarm(10);
+    alarm(15);
     [[NSAutoreleasePool alloc] init];
     int expect_failure = argc == 2 && !strcmp(argv[1], "--expect-init-failure");
     for (int i = 1; i < argc; i++) {
@@ -151,6 +176,18 @@ int main(int argc, char **argv) {
         if (!format || !second) return 1;
         [second setView:view];
         if (!render(second, "COMPAT") || !render(first, "CORE_AGAIN")) return 1;
+        void *worker = 0;
+        if (pthread_create(&worker, 0, queue_frames, first)) return 1;
+        for (int attempt = 0; attempt < 200 && queued_frames < 8; attempt++)
+            [display nextEventMatchingMask:1ULL << 10 untilDate:[NSDate dateWithTimeIntervalSinceNow:1.0]
+                                    inMode:@"NSDefaultRunLoopMode" dequeue:1];
+        pthread_join(worker, 0);
+        if (queued_frames != 8 || queued_render_failed || maximum_queue_delay>.25) {
+            printf("FAIL: main dispatch queue delivered %d/8 recurring frames; max delay %.2f ms\n", queued_frames, maximum_queue_delay*1000);
+            fflush(0);
+            return 1;
+        }
+        printf("FRAME_LOOP_PASS: 8 background submissions rendered on the main dispatch queue; max delay %.2f ms\n", maximum_queue_delay*1000);
         printf("PASS: Native Wayland AppKit concurrent core/compat views and pixel readback\n");
         fflush(0);
         return 0;

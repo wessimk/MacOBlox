@@ -1,12 +1,12 @@
-"""Verified source whitespace repair for the known RBXS v11 GLSL pack.
+"""Verified source whitespace repair for pinned RBXS v11 GLSL packs.
 
-The 7411056 client's source parser mistakes every literal ``uniform vec4``
+The 7411056 and 7421053 clients' source parser mistakes every literal ``uniform vec4``
 declaration for a CB constant buffer. Two HeightmapDebugPS sources also have
 ordinary lookup arrays. Changing the space after ``uniform`` to a tab keeps
 the GLSL tokens, names, array sizes, pack offsets and cache keys unchanged,
 while allowing those arrays to reach the OpenGL compiler.
 
-Only the complete known pack, or its four supported whitespace changes, is
+Only a complete known pack, or its four supported whitespace changes, is
 accepted. Unknown packs and any other modifications are left unchanged.
 """
 from dataclasses import dataclass
@@ -44,6 +44,18 @@ RELEASES = (Release(
         Source(0x382CB1, 21572,
                "9d13523b7b5076b2949bad827db313204a074e27720e978332227721e261b4bd",
                (2541,), (0x52C, 0x54B)),
+    ),
+), Release(
+    # 0.742.0.7421053: the two source blobs are unchanged; pack tables moved.
+    4558808,
+    "70c10f51c054748e409e7e8bca3ed894052c08718f34ba37c9dbc482358216df",
+    (
+        Source(3817526, 21402,
+               "9f113af818c8b2df6a584edc16f323326878cf9d20ef5e034790c9a69d2573df",
+               (2568, 2569, 2570), (0x52C, 0x54B)),
+        Source(3838928, 21572,
+               "9d13523b7b5076b2949bad827db313204a074e27720e978332227721e261b4bd",
+               (2571,), (0x52C, 0x54B)),
     ),
 ),)
 

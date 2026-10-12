@@ -82,3 +82,40 @@ shader parser and missing-variant errors; their role in the stall is unproven.
 The remaining failure is unresolved. Passive CGL tracing now records the first
 five flush return codes when `MACOBLOX_TRACE_CGL=1` is enabled. Local evidence
 includes `logs/launch-20261008-214014.log` and `logs/wsl-grey-fresh.log`.
+
+### Rendering investigation, October 12, 2026
+
+- The 7421053 GLSL pack is now covered by the pinned repair manifest. Its
+  Heightmap sources match the already audited 7411056 sources byte for byte;
+  only their pack offsets and descriptor indices changed. The four whitespace
+  repairs eliminate the uniform parser errors and increase successfully
+  compiled shaders from 733 to 735. This does not fix the grey UI.
+- A color control reported a complete framebuffer (`GL_FRAMEBUFFER_COMPLETE`)
+  and no GL errors. A separate Linux control visibly rendered colored buffers
+  through both the parent and child drawable APIs. Directly rendering the
+  player to its parent still produced the grey frame; that experiment was
+  removed.
+- The rendering fixture now requires eight successive background submissions
+  to render on the main dispatch queue, with pixel readback on each frame.
+  The event wait uses a one-second deadline and delivery must remain below
+  250 ms, so a short polling timeout cannot mask a missing dispatch wakeup.
+  Validated WSL runs measured maximum queue delays of 0.89–1.34 ms. The Vulkan
+  initialization-failure control also passed.
+- A full launcher web bridge connected, but the client requested no browser
+  page for this window. The grey pixels are in the OpenGL player UI.
+- Passive debugger captures showed the first render callback returning and
+  clearing its completion guard; the render job was not stepped again during
+  the captured interval. A separate ulock control completed 32 cross-thread
+  wait/wake exchanges. Neither observation establishes the remaining cause.
+- One startup produced UI-colored pixels in its first frame, but subsequent
+  runs returned to grey. A fresh cache, focus changes, home navigation and
+  background-pausing controls did not establish a repeatable fix. Temporary
+  flags and runtime changes were removed or restored after each test.
+- Build and 69 process, display, graphics and shader Python checks passed.
+  Test players and their crash handlers were stopped after screenshot analysis;
+  no test player was left running.
+
+Evidence includes `logs/wsl-final-frame-loop-reviewed/`,
+`logs/wsl-ulock-wake-control.log`, and the October 12 client logs. The remaining
+UI startup/render-job stall is unresolved; fixture success is not a claim that
+the real Roblox UI or gameplay works.

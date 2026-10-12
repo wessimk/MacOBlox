@@ -143,11 +143,12 @@ class ShaderPatchTests(unittest.TestCase):
             self.assertEqual(list(Path(directory).iterdir()), [pack])
 
     def test_known_manifest_only_changes_four_whitespace_bytes(self):
-        release, = shaders.RELEASES
-        self.assertEqual(sum(len(source.sites) for source in release.sources), 4)
-        self.assertEqual(tuple(len(source.descriptors) for source in release.sources), (3, 1))
-        self.assertTrue(all(0 < source.offset < source.offset + source.size <= release.size
-                            for source in release.sources))
+        for release in shaders.RELEASES:
+            with self.subTest(pack=release.sha256):
+                self.assertEqual(sum(len(source.sites) for source in release.sources), 4)
+                self.assertEqual(tuple(len(source.descriptors) for source in release.sources), (3, 1))
+                self.assertTrue(all(0 < source.offset < source.offset + source.size <= release.size
+                                    for source in release.sources))
 
     def test_launch_hook_applies_supported_pack_and_leaves_unknown_pack(self):
         with tempfile.TemporaryDirectory() as directory:
